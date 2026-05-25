@@ -1,0 +1,47 @@
+# Hi there! I'm Maria Christine 👋
+**Site Reliability Engineer (L4) | Platform & Automation Specialist**
+
+Results-driven Site Reliability Engineer with **5 years of total professional engineering experience**, specializing deeply over the last 2+ years in designing, hardening, and maintaining enterprise-grade **Google Kubernetes Engine (GKE)** environments. I focus on building high-throughput infrastructure-as-code blueprints, optimizing cluster scheduling, and enforcing strict production guardrails.
+
+---
+
+### 🛠️ Technical Ecosystem & Stack
+
+* **Container Orchestration:** Google Kubernetes Engine (GKE), Kubernetes (K8s), Managed Node Pools
+* **Infrastructure as Code:** Terraform, OpenTofu
+* **Automation & Scripting:** Python, PowerShell, Bash, Git
+* **CI/CD & DevSecOps:** GitHub Actions, Automated Linting & Security Policy Gates
+* **Observability:** Google Cloud Logging, Cloud Monitoring, Prometheus, Grafana
+
+---
+
+### 🚀 Featured Production Projects
+
+#### 📂 [gke-production-blueprint](https://github.com/mc1994nyaw/gke-production-blueprint)
+*An enterprise-grade, multi-tenant infrastructure layout built for high-throughput containerized environments.*
+* **Advanced Scheduling & Isolation:** Engineered a custom **Terraform layout** that separates core workloads into an optimized system node pool, while isolating heavy application tracking into a dedicated, high-throughput logging node pool using specialized taints, tolerations, and node affinity rules.
+* **Automated Guardrails:** Designed a comprehensive **GitHub Actions CI/CD pipeline** that triggers on every pull request to enforce strict code formatting (`terraform fmt`), syntax validation, and dry-run security analysis (`terraform plan`).
+* **Architecture Documentation:** Maintained a deep-dive technical blueprint and capacity-planning guide detailing exact cluster resource constraints and node configurations.
+
+---
+
+### 📊 GitHub Metrics & Contributions
+
+<p align="left">
+  <img src="https://github-readme-stats.vercel.app/api?username=mc1994nyaw&show_icons=true&theme=radical&hide_border=true" height="150" alt="GitHub Stats" />
+  <img src="https://github-readme-stats.vercel.app/api/top-langs/?username=mc1994nyaw&layout=compact&theme=radical&hide_border=true&langs_count=5" height="150" alt="Top Languages" />
+</p>
+
+---
+
+### ⚡ Beyond Engineering
+When I'm not tuning Kubernetes clusters or writing automation scripts, you can find me:
+* Designing creative branding assets and digital illustrations.
+* Developing custom automation workflows to optimize independent design studios.
+* Collecting trading cards and miniature scale anime figurines.
+
+---
+
+### 🤝 Connect With Me
+* **GitHub:** [github.com/mc1994nyaw](https://github.com/mc1994nyaw)
+* **Location:** Taguig, Philippines
