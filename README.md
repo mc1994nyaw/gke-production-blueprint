@@ -7,6 +7,8 @@ An example private regional GKE platform: VPC and Cloud NAT, three autoscaled no
 
 **Maria Christine Espero** — Site Reliability Engineer. The Terraform, manifests, dashboards, and workflow in this repo are the example. GitHub Actions checks formatting and schema only. It does not log in to Google Cloud, and it does not create a cluster.
 
+New to this repo? Follow [docs/runbook.md](docs/runbook.md). It installs the tools, then [deploys](docs/runbook-deploy.md) and covers [day-2 operations, alerts, and teardown](docs/runbook-operations.md). Steps that create billable resources are marked.
+
 ---
 
 ## Overview
@@ -124,6 +126,9 @@ Policy-as-code and image signature checks are not in the repo. The sample image 
 ```text
 .
 ├── .github/workflows/ci.yml
+├── docs/runbook.md               # beginner guide: tools, project, billing
+├── docs/runbook-deploy.md        # state, apply, private endpoint, Helm, checks
+├── docs/runbook-operations.md    # scale, alerts, teardown
 ├── docs/slo.md
 ├── manifests/sample-app/          # deployment, HPA, PDB, NetworkPolicy, ServiceMonitor
 ├── monitoring/
@@ -141,6 +146,8 @@ Policy-as-code and image signature checks are not in the repo. The sample image 
 ```
 
 ## Getting started
+
+If you have not applied this example before, use [docs/runbook.md](docs/runbook.md) and continue through [docs/runbook-deploy.md](docs/runbook-deploy.md). The short form below is the same sequence without the per-command explanation. It **costs money** at `terraform apply`.
 
 ### Prerequisites
 
@@ -216,7 +223,7 @@ If you change `project_id` or `name_prefix`, point the sample ServiceAccount ann
 | Observability | Implemented as config | Helm values, dashboard, alert and recording rules. CI does not install them. |
 | Security | Implemented in part | Private cluster, IAM, Workload Identity, pod security, NetworkPolicy. No policy-as-code or image provenance. |
 | SLOs | Example | [docs/slo.md](docs/slo.md) and matching rules. Targets are examples, not measurements. |
-| Later | Not started | A log collector for the logging pool, a bastion or IAP path, policy-as-code, image digest pinning, and a capacity note written from a real apply. |
+| Later | Not started | A log collector for the logging pool, Terraform for a bastion (the runbook creates a manual VM instead), policy-as-code, image digest pinning, and a capacity note written from a real apply. |
 
 ## Author
 

@@ -2,6 +2,8 @@
 
 Example root module for a private regional GKE cluster. `terraform validate` does not need credentials. `plan` and `apply` do, and they are not part of CI.
 
+First time here? Use [docs/runbook.md](../docs/runbook.md), then [docs/runbook-deploy.md](../docs/runbook-deploy.md). Teardown, including `deletion_protection`, is in [docs/runbook-operations.md](../docs/runbook-operations.md).
+
 ## What it creates
 
 - A custom-mode VPC, one subnet with private Google access, pod and service secondary ranges, VPC flow logs, a Cloud Router, and Cloud NAT. Nodes do not get public IPs. GCP has no separate "private subnet" type; privacy here means private nodes plus NAT egress.
