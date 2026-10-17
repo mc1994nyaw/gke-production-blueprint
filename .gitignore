@@ -1,0 +1,44 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+.terraformrc
+terraform.rc
+tfplan
+*tfplan*
+*.tfplan
+
+# Kubernetes and local cluster credentials
+.kube/
+kubeconfig
+*.kubeconfig
+
+# Secrets and local environment
+.env
+.env.*
+*.pem
+*.key
+*credentials*.json
+service-account*.json
+*-sa.json
+
+# Helm packages
+*.tgz
+
+# Editor and OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
