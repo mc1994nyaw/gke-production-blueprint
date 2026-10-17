@@ -1,0 +1,97 @@
+# Example values for prometheus-community/kube-prometheus-stack chart 92.10.1.
+# Sizes below are examples so the stack fits the conversation around the
+# example node pools. They are not a capacity recommendation.
+# CI does not run helm install.
+
+fullnameOverride: kube-prometheus-stack
+
+defaultRules:
+  create: true
+  rules:
+    # GKE does not expose these control plane components for scraping.
+    etcd: false
+    kubeControllerManager: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    # Dataplane V2 does not run kube-proxy.
+    kubeProxy: false
+    windows: false
+
+alertmanager:
+  alertmanagerSpec:
+    replicas: 1
+
+grafana:
+  enabled: true
+  service:
+    type: ClusterIP
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+# adminPassword is unset on purpose. The chart stores a generated password
+# in its Grafana secret. Do not commit a password in this file.
+prometheus:
+  prometheusSpec:
+    replicas: 1
+    retention: 15d
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector: {}
+    ruleNamespaceSelector: {}
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    podMonitorNamespaceSelector: {}
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 2Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 50Gi
+    nodeSelector:
+      kubernetes.io/os: linux
+
+kubeEtcd:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeProxy:
+  enabled: false
+
+nodeExporter:
+  operatingSystems:
+    linux:
+      enabled: true
+    aix:
+      enabled: false
+    darwin:
+      enabled: false
+
+# DaemonSet must land on the tainted application and logging pools.
+prometheus-node-exporter:
+  tolerations:
+    - operator: Exists

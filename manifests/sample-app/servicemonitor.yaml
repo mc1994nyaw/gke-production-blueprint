@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: sample-app
+  namespace: sample-app
+  labels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/part-of: gke-production-blueprint
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sample-app
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s

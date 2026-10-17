@@ -1,157 +1,222 @@
 # GKE Production Blueprint
 
-A portfolio blueprint for a production Google Kubernetes Engine platform: networking, autoscaling, Prometheus and Grafana, CI/CD, security, and SLOs.
+An example private regional GKE platform: VPC and Cloud NAT, three autoscaled node pools, Workload Identity, a sample app, Prometheus and Grafana config, and CI that does not need cloud credentials.
 
-[![Project status](https://img.shields.io/badge/status-design%20%26%20roadmap-0F6CBD)](#roadmap)
+[![Project status](https://img.shields.io/badge/status-example%20implementation-0F6CBD)](#roadmap)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2563eb)](LICENSE)
 
-**Maria Christine Espero** — Site Reliability Engineer. This repository is the public design for that blueprint. Terraform, Kubernetes manifests, dashboards, and GitHub Actions workflows are still on the [roadmap](#roadmap).
+**Maria Christine Espero** — Site Reliability Engineer. The Terraform, manifests, dashboards, and workflow in this repo are the example. GitHub Actions checks formatting and schema only. It does not log in to Google Cloud, and it does not create a cluster.
 
 ---
 
 ## Overview
 
-The blueprint describes how a small platform team can run GKE with production guardrails:
+The example shows how a small platform team can lay out GKE:
 
-- A VPC-native cluster with separate node pools for system pods, application workloads, and log shipping.
-- Scheduling controls (taints, tolerations, and node affinity) so noisy logging pods stay on their own pool.
-- Pull-request checks for Terraform formatting, validation, and plan output.
-- Metrics in Prometheus, dashboards in Grafana, and a written SLO for each reference workload once one exists.
+- A VPC-native regional cluster with private nodes, a private control plane endpoint, and Cloud NAT for egress.
+- A system pool for add-ons, an application pool for the sample workload, and a logging pool reserved for a collector that is not in this repo yet.
+- Workload Identity and a node service account limited to `roles/container.defaultNodeServiceAccount`.
+- podinfo as a reference app, with requests and limits, probes, an HPA, a PodDisruptionBudget, and default-deny NetworkPolicies.
+- kube-prometheus-stack values, a Grafana dashboard, Prometheus recording rules, and an SLO write-up whose numbers are labeled as examples.
 
-This is an independent portfolio project. It reflects how the author builds and supports Kubernetes platforms, and it is separate from any employer environment.
+This is an independent portfolio project. It is separate from any employer environment. Sizes, CIDRs, and SLO targets in the files are placeholders. See [docs/slo.md](docs/slo.md).
 
-## Target architecture
+## Architecture
 
-The diagram is the intended design. The modules that create it are the first roadmap milestone.
+The diagram matches the modules and manifests in the repo. The logging pool exists in Terraform and scales from zero because no collector is scheduled onto it.
 
 ```mermaid
 flowchart LR
-  dev[Pull request] --> ci[GitHub Actions]
-  ci --> checks["fmt, validate, plan"]
-  checks --> tf[Terraform]
-  tf --> vpc[VPC and subnet]
-  tf --> gke[GKE cluster]
-  tf --> iam[Workload Identity and IAM]
+  subgraph gcp [Google Cloud]
+    vpc[VPC and node subnet]
+    nat[Cloud NAT]
+    gke[Private regional GKE]
+    nodesa[Node service account]
+    appsa[Sample app Workload Identity]
+  end
 
   subgraph pools [Node pools]
     system[System pool]
     app[Application pool]
-    logging[Logging pool]
+    logging[Logging pool min 0]
   end
 
+  vpc --> gke
+  nat --> vpc
   gke --> system
   gke --> app
   gke --> logging
+  nodesa --> gke
+  appsa --> sample[sample-app]
 
-  app --> prom[Prometheus]
-  logging --> prom
-  prom --> grafana[Grafana]
-  prom --> slo[SLO rules and error budget]
+  subgraph cluster [In cluster]
+    sample
+    kps[kube-prometheus-stack]
+    rules[Recording rules and example alerts]
+  end
+
+  app --> sample
+  system --> kps
+  kps --> rules
 ```
 
-| Piece | Intended role |
+| Piece | What the example does |
 | --- | --- |
-| System node pool | Cluster add-ons. Tainted so application pods are not scheduled here. |
-| Application node pool | Tenant and reference workloads, isolated by namespace, RBAC, and network policy. |
-| Logging node pool | High-throughput log shipping, kept off the system and application pools with taints, tolerations, and node affinity. |
-| GitHub Actions | On each pull request: `terraform fmt -check`, `terraform validate`, and `terraform plan`. Apply stays on a protected branch. |
-| Prometheus and Grafana | Cluster and workload metrics, dashboards, and the recording rules behind each SLO. |
+| Network | Custom VPC, private Google access, secondary ranges, flow logs, Cloud NAT. Nodes have no public IP. |
+| Cluster | Regional, private nodes, private endpoint, Dataplane V2, Workload Identity, Shielded Nodes, release channel `REGULAR`. |
+| System pool | No taint, so GKE add-ons and kube-prometheus-stack can schedule. Cluster Autoscaler total min 1, max 3. |
+| Application pool | Taint `workload=app:NoSchedule`. The sample app tolerates it and requires `node-pool=application`. |
+| Logging pool | Taint `workload=logging:NoSchedule`, total min 0. Nothing in the repo schedules here yet. |
+| Sample app | podinfo `6.15.0`, HPA 2–6 on CPU, PDB, probes, restricted pod security, default-deny NetworkPolicy. |
+| Observability | Helm values for chart `92.10.1`, Grafana dashboard JSON, `PrometheusRule` for the example SLO. Managed Prometheus is left off so there is one metrics path. |
+| CI | `terraform fmt`, `terraform validate`, tflint, yamllint, kubeconform. No plan and no apply. |
 
-A capacity note with machine types, disk, and regional choices will live in `docs/` when those values are chosen. Resource numbers belong in that note.
+GKE still creates a default node pool for a moment during cluster create, then Terraform removes it. On a regional cluster that initial count is per zone. Details are in [terraform/README.md](terraform/README.md).
 
-## What this blueprint will demonstrate
-
-Each area below is in scope for the portfolio. The artifacts are listed as roadmap items until they land in the repository.
+## What this demonstrates
 
 ### Networking
 
-A VPC-native GKE cluster, a dedicated subnet, controlled egress, and Kubernetes network policies for traffic between namespaces. Logging and application pools stay on separate scheduling domains so east-west traffic and node placement are explicit.
+`terraform/modules/network` builds the VPC, subnet, and NAT. The cluster uses those ranges and Dataplane V2, which enforces NetworkPolicy without the Calico add-on. `manifests/sample-app/networkpolicy.yaml` denies traffic in the sample namespace except DNS, the Workload Identity metadata address, HTTP from the same namespace, and scrapes from `monitoring`.
+
+This example does not create a bastion, VPN, or IAP tunnel. With the private endpoint enabled, `kubectl` needs a path you provide yourself.
 
 ### Autoscaling
 
-Horizontal Pod Autoscaler on reference workloads, and Cluster Autoscaler on the application and logging pools. Minimum size on the system pool stays high enough for add-ons. Requests and limits are required on every workload the blueprint ships.
+Each node pool sets Cluster Autoscaler totals (`total_min_node_count` / `total_max_node_count`). The sample Deployment requests CPU so the Horizontal Pod Autoscaler can read utilization. GKE's metrics-server is the signal. The HPA bounds, 2 to 6 replicas at 70% CPU, are example numbers.
 
 ### Observability
 
-Prometheus scrapes cluster and workload metrics. Grafana holds the operational dashboards. The same signals feed SLO recording rules. Google Cloud Logging can sit beside this stack later; the first dashboards to add are Prometheus and Grafana, which matches the monitoring path this project is built to show.
+`monitoring/kube-prometheus-stack-values.yaml` is written for chart 92.10.1. Control plane jobs that GKE does not expose (etcd, scheduler, controller-manager, kube-proxy) are disabled. Prometheus selects ServiceMonitors and PrometheusRules in every namespace, which is how the sample app and the SLO rules are picked up.
+
+The Grafana dashboard is `monitoring/dashboards/sample-app.json`. Kustomize turns it into a ConfigMap labeled `grafana_dashboard=1`, which the chart's sidecar loads. Panels are titled as examples.
+
+Workload logs go to Cloud Logging through the cluster `logging_config` (`SYSTEM_COMPONENTS` and `WORKLOADS`). A collector on the logging pool is still future work.
 
 ### CI/CD
 
-The pull-request workflow will run:
+`.github/workflows/ci.yml` runs on pull requests and on pushes to `main`:
 
 1. `terraform fmt -check`
-2. `terraform validate`
-3. `terraform plan` against a documented remote state layout
+2. `terraform init -backend=false` and `terraform validate`
+3. tflint with the Google ruleset
+4. yamllint
+5. `kustomize build` piped to kubeconform, including the Prometheus Operator CRDs
 
-Apply will be a reviewed action on the default branch. The workflow files arrive with the CI/CD milestone.
+`terraform plan` needs a state bucket and Google credentials, so it stays a local step. Apply is a local step too. There is no deploy environment in this repository.
 
 ### Security
 
-Workload Identity for Google API access, namespace RBAC with least privilege, and admission checks so pods set a non-root security context. Secrets and `*.tfvars` stay out of git (see `.gitignore`). Policy-as-code and image provenance checks are later milestones.
+- Private nodes and a private control plane endpoint. The authorized network in the example is `203.0.113.10/32` from RFC 5737 documentation space. Replace it before any real apply.
+- Node service account: `roles/container.defaultNodeServiceAccount` only, not the Compute Engine default account.
+- Sample app Google service account: no project roles. podinfo does not call Google APIs. The Kubernetes service account is allowed to impersonate it, and its API token is not mounted.
+- Pod security: `restricted` on the sample namespace, non-root, dropped capabilities, read-only root filesystem, seccomp.
+- `*.tfvars`, kubeconfigs, and key files are gitignored. No credentials are committed.
+
+Policy-as-code and image signature checks are not in the repo. The sample image is pinned to a tag, not a digest.
 
 ### SLOs
 
-Every reference workload will ship a short SLO document: the user journey, the SLI query, the target, and the error-budget policy. Targets will be written when a service exists to measure.
+[docs/slo.md](docs/slo.md) defines an availability SLI and a latency SLI for the sample app, with example targets of 99.9% and 300ms p99. The recording rules and alerts in `monitoring/prometheusrule.yaml` use those same example numbers and are labeled `example: "true"`. They are not measurements.
 
 ## Repository structure
 
-What is in the repository now:
-
 ```text
 .
+├── .github/workflows/ci.yml
+├── docs/slo.md
+├── manifests/sample-app/          # deployment, HPA, PDB, NetworkPolicy, ServiceMonitor
+├── monitoring/
+│   ├── kube-prometheus-stack-values.yaml
+│   ├── prometheusrule.yaml
+│   └── dashboards/sample-app.json
+├── terraform/
+│   ├── modules/network
+│   ├── modules/gke
+│   ├── modules/iam
+│   ├── terraform.tfvars.example
+│   └── README.md                  # remote state and apply notes
 ├── LICENSE
-├── README.md
-└── .gitignore
+└── README.md
 ```
-
-Layout planned for later pull requests:
-
-```text
-.
-├── terraform/             # VPC, GKE, node pools, IAM, Workload Identity
-├── manifests/             # reference workloads, network policies, HPA
-├── monitoring/            # Prometheus, Grafana, SLO recording rules
-├── docs/                  # capacity notes, SLO write-ups, runbooks
-└── .github/workflows/     # fmt, validate, and plan
-```
-
-Those paths will be added with the milestone that fills them.
 
 ## Getting started
 
 ### Prerequisites
 
-You will need these when the Terraform milestone is merged:
+For CI, nothing beyond Git is required; the workflow installs its own tools.
 
-- A Google Cloud project, with permission to create networks, GKE clusters, and IAM bindings
+To plan or apply locally:
+
+- A Google Cloud project and permission to create networks, GKE clusters, and IAM
 - [Google Cloud SDK](https://cloud.google.com/sdk/docs/install)
-- [kubectl](https://kubernetes.io/docs/tasks/tools/)
-- [Terraform](https://developer.hashicorp.com/terraform/install) 1.6 or later
-- Git
+- [Terraform](https://developer.hashicorp.com/terraform/install) 1.10 or later
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) and [Helm](https://helm.sh/docs/intro/install/) 3
+- A GCS bucket for state, created outside this module
 
-### Clone
+### Check the example
 
 ```bash
 git clone <repository-url>
 cd gke-production-blueprint
 ```
 
-Cluster creation starts once the Terraform milestone is merged. Until then, read the [roadmap](#roadmap). The first implementation pull request should add a Terraform root module and a GitHub Actions workflow that rejects a pull request when `fmt` or `validate` fails.
+The same commands CI runs are listed in `.github/workflows/ci.yml`. A local `terraform validate` looks like this:
 
-Keep credentials out of the tree. Use Application Default Credentials locally, and keep project-specific values in an untracked `terraform.tfvars`.
+```bash
+terraform fmt -check -recursive
+terraform -chdir=terraform init -backend=false -input=false
+terraform -chdir=terraform validate
+```
+
+### Apply, when you mean to
+
+Remote state, the placeholder project id, and the private endpoint are covered in [terraform/README.md](terraform/README.md). Short version:
+
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+# set project_id and replace master_authorized_cidrs
+
+terraform init \
+  -backend-config="bucket=STATE_BUCKET" \
+  -backend-config="prefix=gke-production-blueprint"
+terraform apply
+```
+
+Then install the example workload. The Helm chart is not vendored. Chart `92.10.1` matches the values file. The Grafana admin password is generated by the chart; read it from the release secret rather than putting one in git.
+
+```bash
+gcloud container clusters get-credentials CLUSTER --region REGION --project PROJECT_ID
+
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace \
+  --version 92.10.1 \
+  --values monitoring/kube-prometheus-stack-values.yaml
+
+kubectl apply -k monitoring
+kubectl apply -k manifests/sample-app
+```
+
+`get-credentials` needs a route to the private control plane. This repo does not create that route. CPU and memory requests in the manifests and Helm values are examples; the system pool's `e2-standard-2` is an example too, and a real install should resize it once the monitoring pods are scheduled.
+
+If you change `project_id` or `name_prefix`, point the sample ServiceAccount annotation at `terraform output -raw sample_app_gsa_email`.
 
 ## Roadmap
 
-| Milestone | Outcome |
-| --- | --- |
-| 1. Foundations | Terraform for the VPC, a VPC-native GKE cluster, the three node pools, and Workload Identity. |
-| 2. Guardrails in CI | Pull-request workflow for `terraform fmt`, `terraform validate`, and `terraform plan`. |
-| 3. Networking | Network policies and the egress path documented next to the Terraform. |
-| 4. Autoscaling | Cluster Autoscaler settings and an HPA on a small reference workload. |
-| 5. Observability | Prometheus scrape config and Grafana dashboards under `monitoring/`. |
-| 6. Security | RBAC, pod security defaults, and a documented secret-handling approach. |
-| 7. SLOs | One SLO document and recording rules for the reference workload. The target is set with that workload. |
-| Later | Policy-as-code, image provenance, Cloud Logging integration, and a capacity note once sizes are real. |
+| Milestone | Status | In this repo |
+| --- | --- | --- |
+| Foundations | Implemented | VPC, private regional cluster, three node pools, Workload Identity, least-privilege service accounts. |
+| CI guardrails | Implemented | fmt, validate, tflint, yamllint, kubeconform. Plan and apply stay local because they need credentials. |
+| Networking | Implemented | Terraform network, Dataplane V2, sample-app NetworkPolicies. No bastion. |
+| Autoscaling | Implemented | Cluster Autoscaler totals and an HPA. Bounds are examples. |
+| Observability | Implemented as config | Helm values, dashboard, alert and recording rules. CI does not install them. |
+| Security | Implemented in part | Private cluster, IAM, Workload Identity, pod security, NetworkPolicy. No policy-as-code or image provenance. |
+| SLOs | Example | [docs/slo.md](docs/slo.md) and matching rules. Targets are examples, not measurements. |
+| Later | Not started | A log collector for the logging pool, a bastion or IAP path, policy-as-code, image digest pinning, and a capacity note written from a real apply. |
 
 ## Author
 

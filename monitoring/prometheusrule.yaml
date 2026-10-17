@@ -1,0 +1,56 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: sample-app-slo
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: sample-app
+    app.kubernetes.io/part-of: gke-production-blueprint
+spec:
+  groups:
+    - name: sample-app.sli
+      rules:
+        - record: sample_app:http_request_success_ratio:rate5m
+          expr: |
+            sum(rate(http_request_duration_seconds_count{namespace="sample-app",status!~"5.."}[5m]))
+            /
+            sum(rate(http_request_duration_seconds_count{namespace="sample-app"}[5m]))
+        - record: sample_app:http_request_duration_seconds:p99
+          expr: |
+            histogram_quantile(
+              0.99,
+              sum by (le) (
+                rate(http_request_duration_seconds_bucket{namespace="sample-app"}[5m])
+              )
+            )
+    - name: sample-app.alerts.example
+      rules:
+        - alert: SampleAppErrorBudgetBurn
+          expr: |
+            (1 - sample_app:http_request_success_ratio:rate5m) > (14.4 * 0.001)
+            and
+            sum(rate(http_request_duration_seconds_count{namespace="sample-app"}[5m])) > 0
+          for: 1h
+          labels:
+            severity: warning
+            example: "true"
+          annotations:
+            summary: Example burn alert for the sample app
+            description: >
+              Example only. 14.4 times a 0.1% budget is the SRE workbook
+              fast-burn hint for an example 99.9% target. See docs/slo.md.
+              This threshold was not measured from a running service.
+        - alert: SampleAppLatencyHigh
+          expr: |
+            sample_app:http_request_duration_seconds:p99 > 0.3
+            and
+            sum(rate(http_request_duration_seconds_count{namespace="sample-app"}[5m])) > 0
+          for: 10m
+          labels:
+            severity: warning
+            example: "true"
+          annotations:
+            summary: Example latency alert for the sample app
+            description: >
+              Example only. 300ms p99 is the example target in docs/slo.md,
+              not a measured production SLO.

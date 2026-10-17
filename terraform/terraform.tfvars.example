@@ -1,0 +1,66 @@
+# Copy to terraform.tfvars (gitignored) and replace the placeholder project.
+# CIDRs, machine types, and autoscaling bounds are examples.
+
+project_id  = "example-project-id"
+region      = "us-central1"
+name_prefix = "gke-bp"
+
+subnet_cidr   = "10.10.0.0/20"
+pods_cidr     = "10.20.0.0/16"
+services_cidr = "10.30.0.0/20"
+
+master_ipv4_cidr_block  = "172.16.0.0/28"
+enable_private_endpoint = true
+master_global_access    = false
+
+# 203.0.113.0/24 is TEST-NET-3 documentation space. Replace it before apply.
+master_authorized_cidrs = [
+  {
+    cidr_block   = "203.0.113.10/32"
+    display_name = "example-replace-me"
+  }
+]
+
+release_channel     = "REGULAR"
+deletion_protection = true
+
+node_pools = {
+  system = {
+    machine_type = "e2-standard-2"
+    disk_size_gb = 50
+    disk_type    = "pd-balanced"
+    min_nodes    = 1
+    max_nodes    = 3
+    labels       = { role = "system" }
+  }
+  application = {
+    machine_type = "e2-standard-2"
+    disk_size_gb = 50
+    disk_type    = "pd-balanced"
+    min_nodes    = 1
+    max_nodes    = 5
+    labels       = { role = "application" }
+    taints = [
+      {
+        key    = "workload"
+        value  = "app"
+        effect = "NO_SCHEDULE"
+      }
+    ]
+  }
+  logging = {
+    machine_type = "e2-standard-2"
+    disk_size_gb = 50
+    disk_type    = "pd-balanced"
+    min_nodes    = 0
+    max_nodes    = 3
+    labels       = { role = "logging" }
+    taints = [
+      {
+        key    = "workload"
+        value  = "logging"
+        effect = "NO_SCHEDULE"
+      }
+    ]
+  }
+}
